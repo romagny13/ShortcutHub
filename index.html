@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>✨ Shortcut Hub</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <style>
+      .glassmorphism {
+        background: rgba(18, 18, 18, 0.7);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .gradient-text {
+        background: linear-gradient(120deg, #ff69b4, #ff8c00);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .card-hover {
+        transition: all 0.3s ease;
+      }
+
+      .card-hover:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(255, 105, 180, 0.15);
+      }
+
+      body {
+        background: radial-gradient(
+          circle at top right,
+          #1a0f1f 0%,
+          #0a0a0a 100%
+        );
+        min-height: 100vh;
+        background-attachment: fixed;
+        position: relative;
+        overflow-x: hidden;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(
+            circle at 20% 20%,
+            rgba(255, 105, 180, 0.05) 0%,
+            transparent 30%
+          ),
+          radial-gradient(
+            circle at 80% 80%,
+            rgba(255, 140, 0, 0.05) 0%,
+            transparent 30%
+          );
+        pointer-events: none;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: linear-gradient(45deg, #ff69b4, #ff8c00);
+        border-radius: 4px;
+      }
+
+      .glow {
+        position: relative;
+      }
+
+      .glow::after {
+        content: "";
+        position: absolute;
+        top: -2px;
+        left: -2px;
+        right: -2px;
+        bottom: -2px;
+        background: linear-gradient(45deg, #ff69b4, #ff8c00);
+        border-radius: inherit;
+        z-index: -1;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      .glow:hover::after {
+        opacity: 0.3;
+      }
+
+      .delete-btn {
+        opacity: 0.6;
+        transition: all 0.3s ease;
+      }
+
+      .delete-btn:hover {
+        opacity: 1;
+      }
+
+      /* New compact list styles */
+      .list-view-item {
+        padding: 0.5rem 1rem !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 1rem !important;
+      }
+
+      .list-view-item h3 {
+        margin: 0 !important;
+        min-width: 120px !important;
+      }
+
+      /* Ajout d'un curseur de glissement */
+      .shortcut-item {
+        cursor: grab;
+      }
+
+      .shortcut-item:active {
+        cursor: grabbing;
+      }
+
+      /* Indicateur visuel quand l'élément est déplacé */
+      .shortcut-item.dragging {
+        opacity: 0.5;
+      }
+
+      /* Effet visuel sur la cible du drag-and-drop */
+      .shortcut-item.drag-over {
+        border: 2px dashed #6c63ff; /* Bordure temporaire */
+        transition: border 0.2s ease;
+      }
+
+      /* Add new styles for header layout */
+      .header-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 3rem;
+      }
+
+      .auth-section {
+        flex: 1;
+        text-align: left;
+      }
+
+      .title-section {
+        flex: 2;
+        text-align: center;
+      }
+    </style>
+  </head>
+
+  <body class="text-white font-sans custom-scrollbar">
+    <div class="max-w-5xl mx-auto p-8">
+      <div class="header-container">
+        <!-- Title section remains centered -->
+        <div class="title-section">
+          <h1 class="text-5xl font-bold mb-4 gradient-text">✨ Shortcut Hub</h1>
+          <p class="text-pink-200 opacity-80">
+            Organize your favorite links in style
+          </p>
+        </div>
+
+        <!-- Auth section moved to the left -->
+        <div class="auth-section">
+          <div id="auth-container" class="flex items-center space-x-4">
+            <div id="user-info" class="hidden">
+              <button
+                id="logout-btn"
+                class="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-full"
+              >
+                Logout
+              </button>
+            </div>
+            <button
+              id="login-btn"
+              class="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-full"
+            >
+              Login
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-between items-center mb-8">
+        <div class="flex space-x-4">
+          <button
+            id="viewToggle"
+            class="flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-r from-pink-500 to-orange-500 hover:opacity-90 transform hover:scale-105 transition duration-300 shadow-lg glow"
+          >
+            <i id="viewIcon" class="fas fa-th-list text-white"></i>
+          </button>
+          <button
+            id="addShortcut"
+            class="px-6 py-3 bg-gradient-to-r from-pink-400 to-orange-400 rounded-full hover:opacity-90 transform hover:scale-105 transition duration-300 shadow-lg glow"
+          >
+            <i class="fas fa-plus mr-2"></i> Add Shortcut
+          </button>
+          <button
+            id="clearShortcuts"
+            class="px-6 py-3 bg-gradient-to-r from-pink-400/40 to-orange-400/40 rounded-full hover:opacity-90 transform hover:scale-105 transition duration-300 shadow-lg glow"
+          >
+            <i class="fas fa-trash mr-2"></i> Clear All
+          </button>
+        </div>
+      </div>
+
+      <div
+        id="shortcutsContainer"
+        class="grid gap-6 md:grid-cols-2 lg:grid-cols-3"
+      ></div>
+
+      <div
+        id="addPopup"
+        class="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex justify-center items-center hidden z-50"
+      >
+        <div
+          class="glassmorphism p-8 rounded-2xl shadow-2xl max-w-md w-full transform transition-all duration-300"
+        >
+          <h2 class="text-3xl font-bold mb-6 gradient-text flex items-center">
+            <i class="fas fa-plus mr-3"></i> Add New Shortcut
+          </h2>
+          <form id="addForm" class="space-y-6">
+            <div>
+              <label
+                for="name"
+                class="block text-pink-200 text-sm font-medium mb-2"
+                >Name:</label
+              >
+              <input
+                type="text"
+                id="name"
+                name="name"
+                class="w-full text-black px-4 py-3 rounded-xl bg-black/50 border border-pink-500/30 focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500/50 transition duration-300"
+                required
+              />
+            </div>
+            <div>
+              <label
+                for="url"
+                class="block text-pink-200 text-sm font-medium mb-2"
+                >URL:</label
+              >
+              <input
+                type="url"
+                id="url"
+                name="url"
+                class="w-full text-black px-4 py-3 rounded-xl bg-black/50 border border-pink-500/30 focus:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500/50 transition duration-300"
+                required
+              />
+            </div>
+            <div class="flex justify-end space-x-4 mt-8">
+              <button
+                type="button"
+                onclick="closePopup()"
+                class="px-6 py-3 bg-gray-800/80 rounded-xl hover:bg-gray-700/80 transition duration-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                class="px-6 py-3 bg-gradient-to-r from-pink-500 to-orange-500 rounded-xl hover:opacity-90 transform hover:scale-105 transition duration-300 glow"
+              >
+                <i class="fas fa-plus mr-2"></i> Add
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
