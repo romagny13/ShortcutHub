@@ -12,8 +12,6 @@ import {
   doc,
   setDoc,
   getDoc,
-  updateDoc,
-  arrayUnion,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
@@ -23,10 +21,10 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // Variables globales
-let currentUser = null; // Variable pour stocker l'utilisateur actuel
-let urlChangedOnce = false; // Variable pour suivre le changement du champ URL
+let currentUser = null;
+let urlChangedOnce = false;
 let shortcuts = [];
-let isGridView = true; // Set default to grid view
+let isGridView = true;
 
 // Sélectionner les éléments du DOM
 const loginBtn = document.getElementById("login-btn");
@@ -35,110 +33,132 @@ const userInfo = document.getElementById("user-info");
 const shortcutsContainer = document.getElementById("shortcutsContainer");
 const viewToggleButton = document.getElementById("viewToggle");
 const viewIcon = document.getElementById("viewIcon");
-const addShortcutButton = document.getElementById("addShortcut");
+const addShortcutBtn = document.getElementById("addShortcut");
 const addPopup = document.getElementById("addPopup");
+const closePopupBtn = document.getElementById("closePopupBtn");
 const addForm = document.getElementById("addForm");
 const urlInput = document.getElementById("url");
 const nameInput = document.getElementById("name");
-const clearShortcutsButton = document.getElementById("clearShortcuts");
+const clearShortcutsBtn = document.getElementById("clearShortcuts");
 
+// Connexion de l'utilisateur avec Google
 loginBtn.addEventListener("click", async () => {
   const provider = new GoogleAuthProvider();
   try {
     const result = await signInWithPopup(auth, provider);
-    const user = result.user;
-    console.log("Utilisateur connecté : ", user.displayName);
-    currentUser = user; // Sauvegarder l'utilisateur connecté
-    updateUI(user);
+    currentUser = result.user;
+    console.log("Utilisateur connecté :", currentUser.displayName);
+    updateUI(currentUser);
   } catch (error) {
-    console.error("Erreur d'authentification : ", error.message);
+    console.error("Erreur d'authentification :", error);
+    alert("Erreur lors de la connexion. Veuillez réessayer.");
   }
 });
 
-// Fonction de déconnexion
-logoutBtn.addEventListener("click", () => {
-  signOut(auth)
-    .then(() => {
-      console.log("Utilisateur déconnecté");
-      currentUser = null; // Réinitialiser l'utilisateur lorsque déconnecté
-      updateUI(user);
-    })
-    .catch((error) => {
-      console.error("Erreur de déconnexion : ", error.message);
-    });
-});
-
-onAuthStateChanged(auth, (user) => {
-  if (user) {
-    console.log("Utilisateur connecté : ", user.displayName);
-    currentUser = user; // Sauvegarder l'utilisateur
-    updateUI(user);
-    loadShortcuts().then((s) => {
-      shortcuts = s;
-      displayShortcuts();
-    });
-  } else {
-    console.log("Aucun utilisateur connecté");
-    currentUser = null; // Réinitialiser l'utilisateur lorsque déconnecté
+// Déconnexion de l'utilisateur
+logoutBtn.addEventListener("click", async () => {
+  try {
+    await signOut(auth);
+    console.log("Utilisateur déconnecté");
+    currentUser = null;
+    //shortcuts = [];
     updateUI(null);
+    displayShortcuts();
+  } catch (error) {
+    console.error("Erreur de déconnexion :", error);
+    alert("Erreur lors de la déconnexion. Veuillez réessayer.");
   }
 });
 
-// Fonction pour afficher les éléments selon l'état de l'utilisateur
+// Surveiller l'état d'authentification de l'utilisateur
+onAuthStateChanged(auth, async (user) => {
+  try {
+    if (user) {
+      console.log("Utilisateur connecté :", user.displayName);
+      currentUser = user;
+      updateUI(user);
+      shortcuts = await loadShortcuts();
+      displayShortcuts();
+    } else {
+      console.log("Aucun utilisateur connecté");
+      currentUser = null;
+      updateUI(null);
+      displayShortcuts();
+    }
+  } catch (error) {
+    console.error(
+      "Erreur lors du changement d'état d'authentification:",
+      error
+    );
+  }
+});
+
+// Fonction pour afficher l'interface utilisateur selon l'état de l'utilisateur
 function updateUI(user) {
   if (user) {
-    // Utilisateur connecté : afficher message de bienvenue et bouton logout
     userInfo.classList.remove("hidden");
     loginBtn.classList.add("hidden");
+    logoutBtn.classList.remove("hidden");
   } else {
-    // Utilisateur déconnecté : afficher bouton login
     userInfo.classList.add("hidden");
     loginBtn.classList.remove("hidden");
+    logoutBtn.classList.add("hidden");
   }
 }
 
 // Sauvegarder les raccourcis dans Firestore
 async function saveShortcutsToFirestore(userId, shortcuts) {
-  const userRef = doc(db, "users", userId);
+  if (!userId) return;
 
+  const userRef = doc(db, "users", userId);
   try {
-    // Vérifier si l'utilisateur a déjà un document dans Firestore
-    const userDoc = await getDoc(userRef);
-    if (userDoc.exists()) {
-      // Si le document existe déjà, mettre à jour les raccourcis et la date de modification
-      await updateDoc(userRef, {
-        shortcuts: arrayUnion(...shortcuts),
-        lastModified: serverTimestamp(), // Mettre à jour la date
-      });
-      console.log("Raccourcis mis à jour avec la date de modification !");
-    } else {
-      // Si l'utilisateur n'a pas de document, créer un nouveau document avec les raccourcis et la date
-      await setDoc(userRef, {
-        shortcuts: shortcuts,
-        lastModified: serverTimestamp(), // Ajouter la date de modification
-      });
-      console.log("Raccourcis enregistrés avec la date de modification !");
-    }
+    await setDoc(userRef, {
+      shortcuts: shortcuts,
+      lastModified: serverTimestamp(),
+    });
+    console.log("Raccourcis sauvegardés dans Firestore");
   } catch (error) {
-    console.error("Erreur lors de l'enregistrement des raccourcis : ", error);
+    console.error("Erreur lors de la sauvegarde Firestore:", error);
+    throw error;
   }
 }
 
 // Charger les raccourcis depuis Firestore
 async function loadShortcutsFromFirestore(userId) {
+  if (!userId) return null;
+
   const userRef = doc(db, "users", userId);
   try {
     const userDoc = await getDoc(userRef);
     if (userDoc.exists()) {
       const data = userDoc.data();
-      console.log("Raccourcis de l'utilisateur : ", data.shortcuts);
-      console.log("Date de dernière modification : ", data.lastModified);
-      return data;
-    } else {
-      console.log("Aucun raccourci trouvé pour cet utilisateur.");
+      return {
+        shortcuts: data.shortcuts || [],
+        lastModified: data.lastModified,
+      };
     }
+    return null;
   } catch (error) {
-    console.error("Erreur lors du chargement des raccourcis : ", error);
+    console.error("Erreur lors du chargement Firestore:", error);
+    throw error;
+  }
+}
+
+// Fonction unifiée pour sauvegarder les raccourcis
+async function saveShortcuts() {
+  try {
+    if (currentUser) {
+      await saveShortcutsToFirestore(currentUser.uid, shortcuts);
+    }
+
+    const currentDate = new Date().toISOString();
+    localStorage.setItem("shortcuts", JSON.stringify(shortcuts));
+    localStorage.setItem("lastModified", currentDate);
+
+    return true;
+  } catch (error) {
+    console.error("Erreur lors de la sauvegarde:", error);
+    throw error;
   }
 }
 
@@ -146,40 +166,69 @@ async function loadShortcuts() {
   let shortcuts = JSON.parse(localStorage.getItem("shortcuts")) || [];
 
   if (currentUser) {
-    let firestoreShortcuts = await loadShortcutsFromFirestore(currentUser.uid);
+    let firestoreData = await loadShortcutsFromFirestore(currentUser.uid);
 
-    if (firestoreShortcuts) {
+    if (firestoreData) {
       const localDate = new Date(localStorage.getItem("lastModified"));
-      const firestoreDate = firestoreShortcuts.lastModified.toDate();
+      const firestoreDate = firestoreData.lastModified.toDate();
 
       if (localDate.getTime() < firestoreDate.getTime()) {
-        // Si la date locale est plus ancienne, synchronise avec Firestore
         localStorage.setItem(
           "shortcuts",
-          JSON.stringify(firestoreShortcuts.shortcuts)
+          JSON.stringify(firestoreData.shortcuts)
         );
-        return firestoreShortcuts.shortcuts;
+        return firestoreData.shortcuts;
       } else {
-        // Si la date locale est plus récente, envoie vers Firestore
-        saveShortcutsToFirestore(currentUser.uid, shortcuts);
+        await saveShortcutsToFirestore(currentUser.uid, shortcuts);
         return shortcuts;
       }
+    } else {
+      await saveShortcutsToFirestore(currentUser.uid, shortcuts);
     }
   }
 
   return shortcuts;
 }
 
-async function saveShortcuts() {
-  if (currentUser) {
-    await saveShortcutsToFirestore(currentUser.uid, shortcuts);
-  }
+// Fonction unifiée pour charger les raccourcis
+// async function loadShortcuts() {
+//   try {
+//     let finalShortcuts = [];
+//     const localShortcuts = JSON.parse(localStorage.getItem("shortcuts")) || [];
+//     const localDate = localStorage.getItem("lastModified");
 
-  localStorage.setItem("shortcuts", JSON.stringify(shortcuts));
-  const currentDate = new Date(); // Crée une nouvelle instance de la date actuelle
-  localStorage.setItem("lastModified", currentDate.toISOString());
-}
+//     if (currentUser) {
+//       const firestoreData = await loadShortcutsFromFirestore(currentUser.uid);
 
+//       if (firestoreData) {
+//         const firestoreDate = firestoreData.lastModified.toDate();
+
+//         if (!localDate || new Date(localDate) < firestoreDate) {
+//           finalShortcuts = firestoreData.shortcuts;
+//           localStorage.setItem("shortcuts", JSON.stringify(finalShortcuts));
+//           localStorage.setItem("lastModified", firestoreDate.toISOString());
+//         } else {
+//           finalShortcuts = localShortcuts;
+//           await saveShortcutsToFirestore(currentUser.uid, localShortcuts);
+//         }
+//       } else {
+//         finalShortcuts = localShortcuts;
+//         if (localShortcuts.length > 0) {
+//           await saveShortcutsToFirestore(currentUser.uid, localShortcuts);
+//         }
+//       }
+//     } else {
+//       finalShortcuts = localShortcuts;
+//     }
+
+//     return finalShortcuts;
+//   } catch (error) {
+//     console.error("Erreur lors du chargement des raccourcis:", error);
+//     return JSON.parse(localStorage.getItem("shortcuts")) || [];
+//   }
+// }
+
+// Fonction pour obtenir l'icône selon l'URL
 function getIconForUrl(url) {
   const mappings = [
     {
@@ -252,35 +301,35 @@ function getIconForUrl(url) {
     },
   ];
 
-  // Parcours des mappages pour trouver une correspondance
   for (const mapping of mappings) {
     if (mapping.domain.some((d) => url.includes(d))) {
       return mapping.icon;
     }
   }
 
-  // Icône par défaut si aucune correspondance
   return `<i class="fas fa-link text-gray-500"></i>`;
 }
 
+// Afficher les raccourcis dans l'interface utilisateur
 function displayShortcuts() {
-  shortcutsContainer.innerHTML = "";
+  try {
+    shortcutsContainer.innerHTML = "";
 
-  const layoutClass = isGridView
-    ? "grid gap-6 md:grid-cols-2 lg:grid-cols-3"
-    : "flex flex-col gap-2";
-  shortcutsContainer.className = layoutClass;
+    const layoutClass = isGridView
+      ? "grid gap-6 md:grid-cols-2 lg:grid-cols-3"
+      : "flex flex-col gap-2";
+    shortcutsContainer.className = layoutClass;
 
-  shortcuts.forEach((shortcut, index) => {
-    const div = document.createElement("div");
-    div.setAttribute("draggable", true); // Ajout du glisser-déposer
-    div.setAttribute("data-index", index); // Identifiant pour le glisser-déposer
+    shortcuts.forEach((shortcut, index) => {
+      const div = document.createElement("div");
+      div.setAttribute("draggable", true); // Ajout du glisser-déposer
+      div.setAttribute("data-index", index); // Identifiant pour le glisser-déposer
 
-    if (isGridView) {
-      const icon = getIconForUrl(shortcut.url);
-      div.className =
-        "glassmorphism p-6 rounded-2xl card-hover group relative shortcut-item";
-      div.innerHTML = `
+      if (isGridView) {
+        const icon = getIconForUrl(shortcut.url);
+        div.className =
+          "glassmorphism p-6 rounded-2xl card-hover group relative shortcut-item";
+        div.innerHTML = `
   <div class="flex justify-between items-start mb-3">
       <h3 class="text-xl font-bold gradient-text truncate" style="max-width: 200px;">
           ${shortcut.name}
@@ -291,12 +340,11 @@ function displayShortcuts() {
   </div>
   <a href="${shortcut.url}" target="_blank" class="text-pink-300 hover:text-pink-400 transition duration-300 block break-words hover:underline flex items-center gap-2">
       ${icon} <span class="truncate">${shortcut.url}</span>
-  </a>
-`;
-    } else {
-      div.className =
-        "glassmorphism rounded-xl card-hover group relative list-view-item shortcut-item";
-      div.innerHTML = `
+  </a>`;
+      } else {
+        div.className =
+          "glassmorphism rounded-xl card-hover group relative list-view-item shortcut-item";
+        div.innerHTML = `
   <button class="delete-button text-gray-400 hover:text-red-400 transition-colors duration-300 delete-btn" data-index="${index}">
       <i class="fas fa-times"></i>
   </button>
@@ -305,81 +353,98 @@ function displayShortcuts() {
   </h3>
   <a href="${shortcut.url}" target="_blank" class="text-pink-300 hover:text-pink-400 transition duration-300 truncate hover:underline flex-1">
       ${shortcut.url}
-  </a>
-`;
-    }
+  </a>`;
+      }
 
-    shortcutsContainer.appendChild(div);
+      shortcutsContainer.appendChild(div);
 
-    // Ajout des événements pour le drag-and-drop
-    div.addEventListener("dragstart", handleDragStart);
-    div.addEventListener("dragover", handleDragOver);
-    div.addEventListener("drop", handleDrop);
-    div.addEventListener("dragenter", handleDragEnter);
-    div.addEventListener("dragleave", handleDragLeave);
-  });
-
-  const deleteButtons = document.querySelectorAll(".delete-button");
-  deleteButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const index = button.getAttribute("data-index");
-      shortcuts.splice(index, 1);
-      localStorage.setItem("shortcuts", JSON.stringify(shortcuts));
-      displayShortcuts();
+      div.addEventListener("dragstart", handleDragStart);
+      div.addEventListener("dragover", handleDragOver);
+      div.addEventListener("drop", handleDrop);
+      div.addEventListener("dragenter", handleDragEnter);
+      div.addEventListener("dragleave", handleDragLeave);
     });
-  });
 
-  // Mise à jour de l'icône de vue
-  viewIcon.className = isGridView ? "fas fa-th-list" : "fas fa-th";
-}
+    const deleteButtons = document.querySelectorAll(".delete-button");
+    deleteButtons.forEach((button) => {
+      button.addEventListener("click", async (e) => {
+        try {
+          const index = button.getAttribute("data-index");
+          shortcuts.splice(index, 1);
+          await saveShortcuts();
+          displayShortcuts();
+        } catch (error) {
+          console.error("Erreur lors de la suppression:", error);
+          alert("Erreur lors de la suppression. Veuillez réessayer.");
+        }
+      });
+    });
 
-// Gestion du début du drag
-function handleDragStart(event) {
-  event.dataTransfer.setData("text/plain", event.target.dataset.index);
-  event.target.classList.add("dragging"); // Ajouter une classe pour l'indicateur visuel
-}
-
-// Gestion du survol (dragover)
-function handleDragOver(event) {
-  event.preventDefault(); // Nécessaire pour autoriser le drop
-}
-
-// Gestion du début de l'entrée d'un élément dans la zone de drop
-function handleDragEnter(event) {
-  const target = event.target.closest(".shortcut-item");
-  if (target && !target.classList.contains("dragging")) {
-    target.classList.add("drag-over"); // Ajouter un effet visuel sur la cible
+    viewIcon.className = isGridView ? "fas fa-th-list" : "fas fa-th";
+  } catch (error) {
+    console.error("Erreur lors de l'affichage des raccourcis:", error);
+    shortcutsContainer.innerHTML = `
+      <div class="text-red-500 p-4">
+        Une erreur est survenue lors de l'affichage des raccourcis.
+        Veuillez rafraîchir la page.
+      </div>
+    `;
   }
 }
 
-// Gestion de la sortie d'un élément de la zone de drop
-function handleDragLeave(event) {
-  const target = event.target.closest(".shortcut-item");
-  if (target) {
-    target.classList.remove("drag-over"); // Retirer l'effet visuel
-  }
-}
-
-// Gestion du drop
+// Gestion du drag and drop
 async function handleDrop(event) {
   event.preventDefault();
   const target = event.target.closest(".shortcut-item");
   if (target) {
-    target.classList.remove("drag-over"); // Retirer l'effet visuel
+    target.classList.remove("drag-over");
   }
 
-  const draggedIndex = event.dataTransfer.getData("text/plain");
-  const droppedIndex = target.dataset.index;
+  try {
+    const draggedIndex = parseInt(event.dataTransfer.getData("text/plain"));
+    const droppedIndex = parseInt(target.dataset.index);
 
-  // Réorganiser les éléments dans le tableau
-  const draggedItem = shortcuts.splice(draggedIndex, 1)[0];
-  shortcuts.splice(droppedIndex, 0, draggedItem);
-
-  // Sauvegarder dans localStorage et redéfinir l'affichage
- await saveShortcuts();
-  displayShortcuts();
+    if (
+      !isNaN(draggedIndex) &&
+      !isNaN(droppedIndex) &&
+      draggedIndex !== droppedIndex
+    ) {
+      const draggedItem = shortcuts[draggedIndex];
+      shortcuts.splice(draggedIndex, 1);
+      shortcuts.splice(droppedIndex, 0, draggedItem);
+      await saveShortcuts();
+      displayShortcuts();
+    }
+  } catch (error) {
+    console.error("Erreur lors du déplacement:", error);
+    alert("Erreur lors du déplacement. Veuillez réessayer.");
+  }
 }
 
+function handleDragStart(event) {
+  event.dataTransfer.setData("text/plain", event.target.dataset.index);
+  event.target.classList.add("dragging");
+}
+
+function handleDragOver(event) {
+  event.preventDefault();
+}
+
+function handleDragEnter(event) {
+  const target = event.target.closest(".shortcut-item");
+  if (target && !target.classList.contains("dragging")) {
+    target.classList.add("drag-over");
+  }
+}
+
+function handleDragLeave(event) {
+  const target = event.target.closest(".shortcut-item");
+  if (target) {
+    target.classList.remove("drag-over");
+  }
+}
+
+// Gestion du popup
 function openPopup() {
   urlChangedOnce = false;
   urlInput.value = "";
@@ -394,23 +459,45 @@ function closePopup() {
   addPopup.classList.add("hidden");
 }
 
+// Event listeners
 addForm.addEventListener("submit", async function (event) {
   event.preventDefault();
-  const name = document.getElementById("name").value;
-  const url = document.getElementById("url").value;
-  shortcuts.push({ name, url });
-  await saveShortcuts();
-  displayShortcuts();
-  closePopup();
-  addForm.reset();
+  try {
+    const name = nameInput.value.trim();
+    const url = urlInput.value.trim();
+
+    if (!name || !url) {
+      alert("Veuillez remplir tous les champs");
+      return;
+    }
+
+    shortcuts.push({ name, url });
+    await saveShortcuts();
+    displayShortcuts();
+    closePopup();
+    addForm.reset();
+  } catch (error) {
+    console.error("Erreur lors de l'ajout du raccourci:", error);
+    alert("Une erreur est survenue lors de la sauvegarde. Veuillez réessayer.");
+  }
 });
 
-addShortcutButton.addEventListener("click", openPopup);
+addShortcutBtn.addEventListener("click", openPopup);
+closePopupBtn.addEventListener("click", closePopup);
 
-clearShortcutsButton.addEventListener("click", async function () {
-  shortcuts = [];
-  await saveShortcuts();
-  displayShortcuts();
+clearShortcutsBtn.addEventListener("click", async function () {
+  try {
+    if (confirm("Êtes-vous sûr de vouloir supprimer tous les raccourcis ?")) {
+      shortcuts = [];
+      await saveShortcuts();
+      displayShortcuts();
+    }
+  } catch (error) {
+    console.error("Erreur lors de la suppression des raccourcis:", error);
+    alert(
+      "Une erreur est survenue lors de la suppression. Veuillez réessayer."
+    );
+  }
 });
 
 viewToggleButton.addEventListener("click", function () {
@@ -419,15 +506,19 @@ viewToggleButton.addEventListener("click", function () {
 });
 
 urlInput.addEventListener("input", function () {
-  const urlValue = this.value;
+  const urlValue = this.value.trim();
   if (!urlChangedOnce && urlValue && nameInput.value === "") {
-    // Lorsque le champ URL est modifié pour la première fois, on copie la valeur dans 'name'
     nameInput.value = urlValue;
-    urlChangedOnce = true; // Marquer que le champ a été modifié une fois
+    urlChangedOnce = true;
   }
 });
 
-loadShortcuts().then((s) => {
-  shortcuts = s;
-  displayShortcuts();
+// Initialisation
+window.addEventListener("DOMContentLoaded", async () => {
+  try {
+    shortcuts = await loadShortcuts();
+    displayShortcuts();
+  } catch (error) {
+    console.error("Erreur lors de l'initialisation:", error);
+  }
 });
