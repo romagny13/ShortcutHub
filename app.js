@@ -77,11 +77,12 @@ onAuthStateChanged(auth, async (user) => {
       console.log("Utilisateur connecté :", user.displayName);
       currentUser = user;
       updateUI(user);
-      shortcuts = await loadShortcuts();
+      shortcuts = await loadAndSyncShortcuts();
       displayShortcuts();
     } else {
       console.log("Aucun utilisateur connecté");
       currentUser = null;
+      shortcuts = loadShortcutsFromLocalStorage();
       updateUI(null);
       displayShortcuts();
     }
@@ -106,24 +107,25 @@ function updateUI(user) {
   }
 }
 
-// Sauvegarder les raccourcis dans Firestore
-async function saveShortcutsToFirestore(userId, shortcuts) {
-  if (!userId) return;
-
-  const userRef = doc(db, "users", userId);
-  try {
-    await setDoc(userRef, {
-      shortcuts: shortcuts,
-      lastModified: serverTimestamp(),
-    });
-    console.log("Raccourcis sauvegardés dans Firestore");
-  } catch (error) {
-    console.error("Erreur lors de la sauvegarde Firestore:", error);
-    throw error;
+async function loadAndSyncShortcuts() {
+  let shortcuts = loadShortcutsFromLocalStorage();
+  if (currentUser) {
+    // sync to firestore
+    let firestoreData = await loadShortcutsFromFirestore(currentUser.uid);
+    if (!firestoreData) {
+      await saveShortcutsToFirestore(currentUser.uid, shortcuts);
+    } else {
+      return firestoreData.shortcuts;
+    }
   }
+  return shortcuts;
 }
 
-// Charger les raccourcis depuis Firestore
+function loadShortcutsFromLocalStorage() {
+  let shortcuts = JSON.parse(localStorage.getItem("shortcuts")) || [];
+  return shortcuts;
+}
+
 async function loadShortcutsFromFirestore(userId) {
   if (!userId) return null;
 
@@ -144,17 +146,13 @@ async function loadShortcutsFromFirestore(userId) {
   }
 }
 
-// Fonction unifiée pour sauvegarder les raccourcis
 async function saveShortcuts() {
   try {
     if (currentUser) {
       await saveShortcutsToFirestore(currentUser.uid, shortcuts);
+    } else {
+      saveShortcutsToLocalStorage();
     }
-
-    const currentDate = new Date().toISOString();
-    localStorage.setItem("shortcuts", JSON.stringify(shortcuts));
-    localStorage.setItem("lastModified", currentDate);
-
     return true;
   } catch (error) {
     console.error("Erreur lors de la sauvegarde:", error);
@@ -162,73 +160,28 @@ async function saveShortcuts() {
   }
 }
 
-async function loadShortcuts() {
-  let shortcuts = JSON.parse(localStorage.getItem("shortcuts")) || [];
-
-  if (currentUser) {
-    let firestoreData = await loadShortcutsFromFirestore(currentUser.uid);
-
-    if (firestoreData) {
-      const localDate = new Date(localStorage.getItem("lastModified"));
-      const firestoreDate = firestoreData.lastModified.toDate();
-
-      if (localDate.getTime() < firestoreDate.getTime()) {
-        localStorage.setItem(
-          "shortcuts",
-          JSON.stringify(firestoreData.shortcuts)
-        );
-        return firestoreData.shortcuts;
-      } else {
-        await saveShortcutsToFirestore(currentUser.uid, shortcuts);
-        return shortcuts;
-      }
-    } else {
-      await saveShortcutsToFirestore(currentUser.uid, shortcuts);
-    }
-  }
-
-  return shortcuts;
+function saveShortcutsToLocalStorage() {
+  const currentDate = new Date().toISOString();
+  localStorage.setItem("shortcuts", JSON.stringify(shortcuts));
+  localStorage.setItem("lastModified", currentDate);
 }
 
-// Fonction unifiée pour charger les raccourcis
-// async function loadShortcuts() {
-//   try {
-//     let finalShortcuts = [];
-//     const localShortcuts = JSON.parse(localStorage.getItem("shortcuts")) || [];
-//     const localDate = localStorage.getItem("lastModified");
+async function saveShortcutsToFirestore(userId, shortcuts) {
+  if (!userId) return;
 
-//     if (currentUser) {
-//       const firestoreData = await loadShortcutsFromFirestore(currentUser.uid);
+  const userRef = doc(db, "users", userId);
+  try {
+    await setDoc(userRef, {
+      shortcuts: shortcuts,
+      lastModified: serverTimestamp(),
+    });
+    console.log("Raccourcis sauvegardés dans Firestore");
+  } catch (error) {
+    console.error("Erreur lors de la sauvegarde Firestore:", error);
+    throw error;
+  }
+}
 
-//       if (firestoreData) {
-//         const firestoreDate = firestoreData.lastModified.toDate();
-
-//         if (!localDate || new Date(localDate) < firestoreDate) {
-//           finalShortcuts = firestoreData.shortcuts;
-//           localStorage.setItem("shortcuts", JSON.stringify(finalShortcuts));
-//           localStorage.setItem("lastModified", firestoreDate.toISOString());
-//         } else {
-//           finalShortcuts = localShortcuts;
-//           await saveShortcutsToFirestore(currentUser.uid, localShortcuts);
-//         }
-//       } else {
-//         finalShortcuts = localShortcuts;
-//         if (localShortcuts.length > 0) {
-//           await saveShortcutsToFirestore(currentUser.uid, localShortcuts);
-//         }
-//       }
-//     } else {
-//       finalShortcuts = localShortcuts;
-//     }
-
-//     return finalShortcuts;
-//   } catch (error) {
-//     console.error("Erreur lors du chargement des raccourcis:", error);
-//     return JSON.parse(localStorage.getItem("shortcuts")) || [];
-//   }
-// }
-
-// Fonction pour obtenir l'icône selon l'URL
 function getIconForUrl(url) {
   const mappings = [
     {
@@ -514,11 +467,11 @@ urlInput.addEventListener("input", function () {
 });
 
 // Initialisation
-window.addEventListener("DOMContentLoaded", async () => {
-  try {
-    shortcuts = await loadShortcuts();
-    displayShortcuts();
-  } catch (error) {
-    console.error("Erreur lors de l'initialisation:", error);
-  }
-});
+// window.addEventListener("DOMContentLoaded", async () => {
+//   try {
+//     shortcuts = await loadShortcuts();
+//     displayShortcuts();
+//   } catch (error) {
+//     console.error("Erreur lors de l'initialisation:", error);
+//   }
+// });
